@@ -4,3 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+prost = "0.13.5"
+serde = { version = "1.0.218", features = ["derive"] }
+tonic = "0.12.3"
+
+[build-dependencies]
+prost-build = "0.13.5"
+tonic-build = "0.12.3"

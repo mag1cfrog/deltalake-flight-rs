@@ -5,8 +5,8 @@ package deltaflight;
 import "arrow/flight/protocol/flight.proto";
 
 service DeltaFlightService {
-    rpc CreateTable(TableCreationRequest) returns (TableCreateResponse);
-    rpc DoGet(arror.flight.protocol.Ticket) returns (stream arrow.flight.protocol.FlightData);
+    rpc CreateTable(TableCreateRequest) returns (TableCreateResponse);
+    rpc DoGet(arrow.flight.protocol.Ticket) returns (stream arrow.flight.protocol.FlightData);
     rpc DoPut(stream arrow.flight.protocol.FlightData) returns (arrow.flight.protocol.PutResult);
 }
 
