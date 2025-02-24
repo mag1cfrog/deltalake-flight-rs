@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package deltaflight;
+
+import "arrow/flight/protocol/flight.proto";
+
+service DeltaFlightService {
+    rpc CreateTable(TableCreationRequest) returns (TableCreateResponse);
+    rpc DoGet(arror.flight.protocol.Ticket) returns (stream arrow.flight.protocol.FlightData);
+    rpc DoPut(stream arrow.flight.protocol.FlightData) returns (arrow.flight.protocol.PutResult);
+}
+
+message TableCreateRequest {
+    string table_path = 1;
+    repeated ColumnSchema columns =2;
+}
+
+message ColumnSchema {
+    string name = 1;
+    string data_type = 2;
+    bool nullable = 3;
+}
+
+message TableCreateResponse {
+    bool success = 1;
+    string message = 2;
+}
