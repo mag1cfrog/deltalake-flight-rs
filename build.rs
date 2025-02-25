@@ -7,7 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut prost_config = prost_build::Config::new();
 
     prost_config.bytes(["."]); // Use Bytes instead of Vec<u8>
-    prost_config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
+    // prost_config.type_attribute(".", "#[derive(serde::Serialize, serde::Deserialize)]");
 
     // 3. Generate Tonic server code
     tonic_build::configure()
