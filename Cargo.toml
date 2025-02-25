@@ -5,7 +5,10 @@ edition = "2021"
 
 [dependencies]
 arrow = "54.2.0"
+arrow-flight = "54.2.0"
+async-stream = "0.3.6"
 deltalake = { version = "0.24.0", features = ["datafusion"] }
+futures = "0.3.31"
 prost = { version = "0.13.5", features = ["derive", "no-recursion-limit", "prost-derive"] }
 prost-types = "0.13.5"
 regex = "1.11.1"

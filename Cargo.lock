@@ -321,6 +321,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "arrow-flight"
+version = "54.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cf7806ee3d229ee866013e83446e937ab3c8a9e6a664b259d41dd960b309c5d0"
+dependencies = [
+ "arrow-array 54.2.0",
+ "arrow-buffer 54.2.0",
+ "arrow-cast 54.2.0",
+ "arrow-ipc 54.2.0",
+ "arrow-schema 54.2.0",
+ "base64",
+ "bytes",
+ "futures",
+ "prost",
+ "prost-types",
+ "tonic",
+]
+
+[[package]]
 name = "arrow-ipc"
 version = "53.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1566,7 +1585,10 @@ name = "deltalake-flight-rs"
 version = "0.1.0"
 dependencies = [
  "arrow 54.2.0",
+ "arrow-flight",
+ "async-stream",
  "deltalake",
+ "futures",
  "prost",
  "prost-build",
  "prost-types",
