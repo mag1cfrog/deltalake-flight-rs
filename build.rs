@@ -13,6 +13,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
         .build_server(true) // Generate server code
         .build_client(true) // Generate client code
+        .extern_path(".arrow.flight.protocol", "::arrow_flight")
         .compile_protos_with_config(
             prost_config,
             &["proto/deltaflight.proto"], // Your protos
