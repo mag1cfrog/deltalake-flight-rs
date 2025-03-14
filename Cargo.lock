@@ -1385,6 +1385,7 @@ dependencies = [
  "async-stream",
  "deltalake",
  "futures",
+ "hyper-util",
  "prost",
  "prost-build",
  "prost-types",
@@ -1393,8 +1394,10 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "tokio-stream",
  "tonic",
  "tonic-build",
+ "tower 0.5.2",
 ]
 
 [[package]]

@@ -1,5 +1,6 @@
 mod utils;
 
+use std::sync::Arc;
 use std::{collections::HashMap, path::PathBuf, pin::Pin, str::from_utf8};
 
 use arrow::ipc::writer::IpcWriteOptions;
@@ -17,7 +18,7 @@ use crate::{deltaflight::{delta_flight_service_server::DeltaFlightService, Table
 
 #[derive(Debug)]
 struct DeltaFlightServer {
-    tables: Mutex<HashMap<String, PathBuf>>,
+    tables: Arc<Mutex<HashMap<String, PathBuf>>>,
     data_dir: PathBuf,
 }
 
@@ -190,15 +191,19 @@ mod tests {
 
     use super::*;
     use arrow::{array::{ArrayRef, Decimal128Builder, Int32Array, RecordBatch, StringArray}, datatypes::{DataType, Field, Schema}};
-    use arrow_flight::decode::FlightRecordBatchStream;
-    use tempfile::tempdir;
-    use crate::deltaflight::ColumnSchema;
+    use arrow_flight::{decode::FlightRecordBatchStream, flight_descriptor::DescriptorType, FlightDescriptor};
+    use tempfile::{tempdir, NamedTempFile};
+    use tokio::net::{UnixListener, UnixStream};
+    use tokio_stream::wrappers::UnixListenerStream;
+    use tonic::transport::{Endpoint, Server, Uri};
+    use tower::service_fn;
+    use crate::deltaflight::{delta_flight_service_client::DeltaFlightServiceClient, delta_flight_service_server::DeltaFlightServiceServer, ColumnSchema};
 
     // Helper function to create a test server with a temporary directory
     async fn setup_test_server() -> (DeltaFlightServer, tempfile::TempDir) {
         let temp_dir = tempdir().expect("Failed to create temp dir");
         let server = DeltaFlightServer {
-            tables: Mutex::new(HashMap::new()),
+            tables: Arc::new(Mutex::new(HashMap::new())),
             data_dir: temp_dir.path().to_path_buf(),
         };
         (server, temp_dir)
@@ -429,5 +434,191 @@ mod tests {
         
         // Make sure we got at least one batch
         assert!(batch_count > 0, "No batches received");
+    }
+
+    #[tokio::test]
+    async fn test_do_put_with_transport() {
+        // 1. Create a temporary socket
+        let socket = NamedTempFile::new().unwrap();
+        let socket_path = Arc::new(socket.into_temp_path());
+        if socket_path.exists() {
+            std::fs::remove_file(&*socket_path).unwrap();
+        }
+
+        // 2. Setup the test server with a table
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let server = DeltaFlightServer {
+            tables: Arc::new(Mutex::new(HashMap::new())),
+            data_dir: temp_dir.path().to_path_buf(),
+        };
+
+        // 3. Create test table
+        let table_name = "test_put_table";
+        let columns = vec![
+            ColumnSchema {
+                name: "id".to_string(),
+                data_type: "integer".to_string(),
+                nullable: false,
+            },
+            ColumnSchema {
+                name: "name".to_string(),
+                data_type: "string".to_string(),
+                nullable: true,
+            },
+            ColumnSchema {
+                name: "amount".to_string(),
+                data_type: "decimal(10,2)".to_string(),
+                nullable: true,
+            },
+        ];
+
+        let create_request = Request::new(TableCreateRequest {
+            table_path: table_name.to_string(),
+            columns,
+        });
+        
+        server.create_table(create_request).await.expect("Table creation failed");
+
+        // 4. Start the server on the Unix socket
+        let uds = UnixListener::bind(&*socket_path).unwrap();
+        let stream = UnixListenerStream::new(uds);
+
+        // We need to clone the server because it will be moved into the serve_future
+        let server_clone = DeltaFlightServer {
+            tables: server.tables.clone(),
+            data_dir: server.data_dir.clone(),
+        };
+
+        let serve_future = async move {
+            let result = Server::builder()
+                .add_service(DeltaFlightServiceServer::new(server_clone))
+                .serve_with_incoming(stream)
+                .await;
+            assert!(result.is_ok());
+        };
+
+        // 5. Create a client that connects to the server
+        let socket_clone = Arc::clone(&socket_path);
+        let channel = Endpoint::try_from("http://any.url")
+            .unwrap()
+            .connect_with_connector(service_fn(move |_: Uri| {
+                let socket = Arc::clone(&socket_clone);
+                async move { 
+                    let unix_stream = UnixStream::connect(&*socket).await?;
+                    // Wrap the UnixStream with TokioIo to make it compatible with hyper
+                    Ok::<_, std::io::Error>(hyper_util::rt::tokio::TokioIo::new(unix_stream))
+                }
+            }))
+            .await
+            .unwrap();
+
+        let mut client = DeltaFlightServiceClient::new(channel);
+
+        // 6. Create test data
+        let schema = Arc::new(Schema::new(vec![
+            Field::new("id", DataType::Int32, false),
+            Field::new("name", DataType::Utf8, true),
+            Field::new("amount", DataType::Decimal128(10, 2), true),
+        ]));
+        
+        let id_array: ArrayRef = Arc::new(Int32Array::from(vec![101, 102, 103]));
+        let name_array: ArrayRef = Arc::new(StringArray::from(vec!["John", "Jane", "Doe"]));
+        
+        let mut decimal_builder = Decimal128Builder::with_capacity(3)
+            .with_precision_and_scale(10, 2)
+            .unwrap();
+        for value in [12345, 67890, 54321] {
+            decimal_builder.append_value(value);
+        }
+        let amount_array: ArrayRef = Arc::new(decimal_builder.finish());
+        
+        let batch = RecordBatch::try_new(schema.clone(), vec![id_array, name_array, amount_array])
+            .expect("Failed to create record batch");
+
+        // 7. Create Flight data including descriptor
+        let options = IpcWriteOptions::default();
+        let schema_flight_data: FlightData = SchemaAsIpc::new(&schema, &options).into();
+        let mut schema_data_with_descriptor = schema_flight_data;
+        schema_data_with_descriptor.flight_descriptor = Some(FlightDescriptor {
+            r#type: DescriptorType::Path as i32,
+            cmd: Vec::new().into(),
+            path: vec![table_name.to_string()],
+        });
+        
+        let batch_data = arrow_flight::utils::batches_to_flight_data(&schema, vec![batch])
+            .expect("Failed to convert batch to flight data");
+        let batch_messages = batch_data.into_iter().skip(1).collect::<Vec<_>>();
+        
+        let mut flight_data_vec = vec![schema_data_with_descriptor];
+        flight_data_vec.extend(batch_messages);
+
+        // 8. Create client request future
+        let request_future = async {
+            // Create a channel for the streaming request
+            use tokio::sync::mpsc;
+            use tokio_stream::wrappers::ReceiverStream;
+            
+            let (tx, rx) = mpsc::channel(128); // Buffer size of 128 should be plenty
+            let request_stream = ReceiverStream::new(rx);
+            
+            // Send each flight data message into the channel
+            for flight_data in flight_data_vec {
+                tx.send(flight_data).await.unwrap();
+            }
+            // Drop tx to close the stream (important!)
+            drop(tx);
+
+            // Call do_put over the real transport
+            let response = client
+                .do_put(Request::new(request_stream))
+                .await
+                .unwrap()
+                .into_inner();
+            
+            assert!(String::from_utf8_lossy(&response.app_metadata).contains("Successfully wrote data"));
+            
+            // Verify the data with do_get
+            let ticket = Ticket {
+                ticket: table_name.as_bytes().to_vec().into(),
+            };
+            
+            let get_response = client.do_get(Request::new(ticket)).await.unwrap();
+            let mut stream = get_response.into_inner();
+            
+            // Process the stream to get record batches
+            let mut received_rows = 0;
+            let mut id_sum = 0;
+            
+            // Create a buffer to hold the FlightData messages
+            let mut flight_data_messages = Vec::new();
+            while let Some(result) = stream.message().await.unwrap() {
+                flight_data_messages.push(result);
+            }
+            
+            // Now decode the FlightData into record batches
+            let arrow_stream = arrow_flight::utils::flight_data_to_batches(
+                &flight_data_messages
+            ).unwrap();
+            
+            for batch in arrow_stream {
+                received_rows += batch.num_rows();
+                
+                let id_array = batch.column(0).as_any().downcast_ref::<Int32Array>()
+                    .expect("Expected Int32Array");
+                
+                for i in 0..batch.num_rows() {
+                    id_sum += id_array.value(i);
+                }
+            }
+            
+            assert_eq!(received_rows, 3); // We should have 3 rows
+            assert_eq!(id_sum, 306); // 101 + 102 + 103
+        };
+
+        // 9. Wait for completion
+        tokio::select! {
+            _ = serve_future => panic!("server returned first"),
+            _ = request_future => (),
+        }
     }
 }
