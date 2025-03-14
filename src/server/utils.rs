@@ -1,4 +1,8 @@
-use arrow::{array::RecordBatch, error::ArrowError, ipc::writer::{self, IpcWriteOptions}};
+use arrow::{
+    array::RecordBatch,
+    error::ArrowError,
+    ipc::writer::{self, IpcWriteOptions},
+};
 use arrow_flight::FlightData;
 
 pub fn batches_to_flight_data_without_schema(
@@ -24,6 +28,6 @@ pub fn batches_to_flight_data_without_schema(
     // No schema added here
     stream.extend(dictionaries);
     stream.extend(flight_data);
-    
+
     Ok(stream)
 }
