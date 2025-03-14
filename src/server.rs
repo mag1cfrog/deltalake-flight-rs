@@ -181,3 +181,99 @@ impl DeltaFlightService for DeltaFlightServer {
         }))
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::tempdir;
+    use crate::deltaflight::ColumnSchema;
+
+    // Helper function to create a test server with a temporary directory
+    async fn setup_test_server() -> (DeltaFlightServer, tempfile::TempDir) {
+        let temp_dir = tempdir().expect("Failed to create temp dir");
+        let server = DeltaFlightServer {
+            tables: Mutex::new(HashMap::new()),
+            data_dir: temp_dir.path().to_path_buf(),
+        };
+        (server, temp_dir)
+    }
+
+    #[tokio::test]
+    async fn test_create_table() {
+        // Setup
+        let (server, _temp_dir) = setup_test_server().await;
+        
+        // Create a simple table schema
+        let columns = vec![
+            ColumnSchema {
+                name: "id".to_string(),
+                data_type: "integer".to_string(),
+                nullable: false,
+            },
+            ColumnSchema {
+                name: "name".to_string(),
+                data_type: "string".to_string(),
+                nullable: true,
+            },
+            ColumnSchema {
+                name: "amount".to_string(),
+                data_type: "decimal(10,2)".to_string(),
+                nullable: true,
+            },
+        ];
+        
+        // Create the request
+        let request = Request::new(TableCreateRequest {
+            table_path: "test_table".to_string(),
+            columns,
+        });
+        
+        // Call the function
+        let response = server.create_table(request).await.expect("Table creation failed");
+        let response_inner = response.into_inner();
+        
+        // Validate the response
+        assert!(response_inner.success);
+        assert!(response_inner.message.contains("created successfully"));
+        
+        // Verify the table exists in the in-memory map
+        let tables = server.tables.lock().await;
+        assert!(tables.contains_key("test_table"));
+        
+        // Check that the Delta table files were actually created
+        let table_path = tables.get("test_table").unwrap();
+        assert!(table_path.exists());
+        
+        // Verify that the _delta_log directory was created (a sign that it's a valid Delta table)
+        let delta_log_path = table_path.join("_delta_log");
+        assert!(delta_log_path.exists());
+    }
+    
+    #[tokio::test]
+    async fn test_create_table_with_invalid_type() {
+        let (server, _temp_dir) = setup_test_server().await;
+        
+        // Create an invalid schema (uuid type is not supported)
+        let columns = vec![
+            ColumnSchema {
+                name: "id".to_string(),
+                data_type: "uuid".to_string(), // Invalid type
+                nullable: false,
+            },
+        ];
+        
+        let request = Request::new(TableCreateRequest {
+            table_path: "invalid_table".to_string(),
+            columns,
+        });
+        
+        // This should return an error
+        let result = server.create_table(request).await;
+        assert!(result.is_err());
+        
+        // Check that the error message mentions the unsupported type
+        if let Err(status) = result {
+            assert!(status.message().contains("Unsupported data type"));
+        }
+    }
+}
