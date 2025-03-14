@@ -3,7 +3,7 @@ use regex::Regex;
 use tonic::Status;
 
 /// Parses a type string into Delta Lake's PrimitiveType
-/// 
+///
 /// Supports various type aliases and formats:
 /// - "string" => PrimitiveType::String
 /// - "long" | "bigint" => PrimitiveType::Long
@@ -34,9 +34,12 @@ pub fn parse_data_type(type_str: &str) -> Result<DataType, Status> {
         "timestamp" => PrimitiveType::Timestamp,
         "timestamp_ntz" => PrimitiveType::TimestampNtz,
         decimal if decimal.starts_with("decimal") => parse_decimal(decimal)?,
-        _ => return Err(Status::invalid_argument(format!(
-            "Unsupported data type: {}", type_str
-        ))),
+        _ => {
+            return Err(Status::invalid_argument(format!(
+                "Unsupported data type: {}",
+                type_str
+            )))
+        }
     };
 
     Ok(DataType::Primitive(primitive))
@@ -47,23 +50,24 @@ fn parse_decimal(decimal_str: &str) -> Result<PrimitiveType, Status> {
     let re = Regex::new(r"decimal\((\d+)\s*,\s*(\d+)\)")
         .map_err(|e| Status::internal(format!("Regex error: {}", e)))?;
 
-    let caps = re.captures(decimal_str)
-        .ok_or_else(|| Status::invalid_argument(
-            "Decimal type must be in format 'decimal(precision,scale)'"
-        ))?;
-    
-    let precision = caps[1].parse::<u8>()
+    let caps = re.captures(decimal_str).ok_or_else(|| {
+        Status::invalid_argument("Decimal type must be in format 'decimal(precision,scale)'")
+    })?;
+
+    let precision = caps[1]
+        .parse::<u8>()
         .map_err(|_| Status::invalid_argument("Invalid decimal precision"))?;
 
-    let scale = caps[2].parse::<u8>()
-    .map_err(|_| Status::invalid_argument("Invalid decimal scale"))?;
+    let scale = caps[2]
+        .parse::<u8>()
+        .map_err(|_| Status::invalid_argument("Invalid decimal scale"))?;
 
     if precision < scale {
         return Err(Status::invalid_argument(
-            "Decimal precision cannot be less than scale"
+            "Decimal precision cannot be less than scale",
         ));
     }
-    
+
     Ok(PrimitiveType::Decimal(precision, scale))
 }
 
@@ -77,7 +81,7 @@ mod tests {
             parse_data_type("STRING").unwrap(),
             DataType::Primitive(PrimitiveType::String)
         );
-        
+
         assert_eq!(
             parse_data_type("BIGINT").unwrap(),
             DataType::Primitive(PrimitiveType::Long)
@@ -118,13 +122,13 @@ mod tests {
             parse_data_type("DECIMAL(10,2)").unwrap(),
             DataType::Primitive(PrimitiveType::Decimal(10, 2))
         );
-        
+
         // Test edge cases for precision and scale
         assert_eq!(
             parse_data_type("decimal(38,38)").unwrap(),
             DataType::Primitive(PrimitiveType::Decimal(38, 38))
         );
-        
+
         // Test invalid formats
         assert!(parse_data_type("decimal()").is_err());
         assert!(parse_data_type("decimal(,)").is_err());
