@@ -8,6 +8,7 @@ service DeltaFlightService {
     rpc CreateTable(TableCreateRequest) returns (TableCreateResponse);
     rpc DoGet(arrow.flight.protocol.Ticket) returns (stream arrow.flight.protocol.FlightData);
     rpc DoPut(stream arrow.flight.protocol.FlightData) returns (arrow.flight.protocol.PutResult);
+    rpc ListTables(ListTablesRequest) returns (ListTablesResponse);
 }
 
 message TableCreateRequest {
@@ -24,4 +25,13 @@ message ColumnSchema {
 message TableCreateResponse {
     bool success = 1;
     string message = 2;
+}
+
+message ListTablesRequest {
+// Optional filter patterns
+optional string pattern = 1;
+}
+
+message ListTablesResponse {
+repeated string table_paths = 1;
 }
