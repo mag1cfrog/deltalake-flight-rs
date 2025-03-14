@@ -9,6 +9,7 @@ service DeltaFlightService {
     rpc DoGet(arrow.flight.protocol.Ticket) returns (stream arrow.flight.protocol.FlightData);
     rpc DoPut(stream arrow.flight.protocol.FlightData) returns (arrow.flight.protocol.PutResult);
     rpc ListTables(ListTablesRequest) returns (ListTablesResponse);
+    rpc GetTableInfo(TableInfoRequest) returns (TableInfoResponse);
 }
 
 message TableCreateRequest {
@@ -34,4 +35,29 @@ optional string pattern = 1;
 
 message ListTablesResponse {
 repeated string table_paths = 1;
+}
+
+message TableInfoRequest {
+    string table_path = 1;
+}
+  
+message TableInfoResponse {
+    string table_path = 1;
+    int64 version = 2;
+    string created_at = 3;
+    optional string table_name = 4;
+    optional string description = 5;
+    map<string, string> properties = 6;
+    optional TableSchema schema = 7;  // Add schema as a dedicated field
+}
+
+message TableSchema {
+    int32 field_count = 1;
+    repeated SchemaField fields = 2;
+}
+
+message SchemaField {
+    string name = 1;
+    string data_type = 2;
+    bool nullable = 3;
 }

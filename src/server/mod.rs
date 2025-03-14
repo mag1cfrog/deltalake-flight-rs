@@ -13,7 +13,7 @@ use tonic::{Request, Response, Status};
 use crate::deltaflight::{
     delta_flight_service_server::DeltaFlightService, TableCreateRequest, TableCreateResponse,
 };
-use crate::deltaflight::{ListTablesRequest, ListTablesResponse};
+use crate::deltaflight::{ListTablesRequest, ListTablesResponse, TableInfoRequest, TableInfoResponse};
 
 #[derive(Debug)]
 struct DeltaFlightServer {
@@ -53,5 +53,12 @@ impl DeltaFlightService for DeltaFlightServer {
         request: Request<ListTablesRequest>,
     ) -> Result<Response<ListTablesResponse>, Status> {
         operations::list_tables(self, request).await
+    }
+    
+    async fn get_table_info(
+        &self,
+        request: Request<TableInfoRequest>,
+    ) -> Result<Response<TableInfoResponse>, Status> {
+        operations::get_table_info(self, request).await
     }
 }
