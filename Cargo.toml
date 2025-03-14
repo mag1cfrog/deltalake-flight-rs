@@ -4,10 +4,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-arrow = "53.4.0"
-arrow-flight = "53.4.0"
+arrow = "54.2.1"
+arrow-flight = "54.2.1"
 async-stream = "0.3.6"
-deltalake = { version = "0.24.0", features = ["datafusion"] }
+deltalake = { version = "0.25.0", features = ["datafusion"] }
 futures = "0.3.31"
 prost = { version = "0.13.5", features = ["derive", "no-recursion-limit", "prost-derive"] }
 prost-types = "0.13.5"
@@ -22,8 +22,6 @@ tonic = "0.12.3"
 prost-build = "0.13.5"
 tonic-build = "0.12.3"
 
-[patch.crates-io]
-deltalake-core = { path = "/home/hanbo/repositories/deltalake-core-0.24.0", version = "0.24.0" }
 
 [dev-dependencies]
 hyper-util = { version = "0.1.10", features = ["tokio"] }
