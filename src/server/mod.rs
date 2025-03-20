@@ -1,3 +1,4 @@
+pub mod flight_sql;
 mod operations;
 mod utils;
 
@@ -16,7 +17,7 @@ use crate::deltaflight::{
 use crate::deltaflight::{ListTablesRequest, ListTablesResponse, TableInfoRequest, TableInfoResponse};
 
 #[derive(Debug)]
-struct DeltaFlightServer {
+pub struct DeltaFlightServer {
     tables: Arc<Mutex<HashMap<String, PathBuf>>>,
     data_dir: PathBuf,
 }
